@@ -1,0 +1,72 @@
+version: "3.7"
+
+services:
+    traefik:
+        image: traefik:v2.0
+        ports:
+            - 80:80
+            - 443:443
+            - 8080:8080
+            - 6379:6379
+            - 5432:5432
+            - 27017:27017
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - ./config.toml:/etc/traefik/traefik.config.toml:ro
+            - ./certs:/etc/certs:ro
+        command:
+            - --api.insecure
+            - --accesslog
+            - --log.level=INFO
+            - --entrypoints.http.address=:80
+            - --entrypoints.https.address=:443
+            - --entrypoints.traefik.address=:8080
+            - --entrypoints.mongo.address=:27017
+            - --entrypoints.postgres.address=:5432
+            - --entrypoints.redis.address=:6379
+            - --providers.file.filename=/etc/traefik/traefik.config.toml
+            - --providers.docker
+            - --providers.docker.exposedByDefault=false
+            - --providers.docker.useBindPortIP=false
+
+    apache:
+        image: php:7.2-apache
+        labels:
+            - traefik.enable=true
+            - traefik.http.routers.http-dev.entrypoints=http
+            - traefik.http.routers.http-dev.rule=Host(`example.localhost`)
+            - traefik.http.routers.https-dev.entrypoints=https
+            - traefik.http.routers.https-dev.rule=Host(`example.localhost`)
+            - traefik.http.routers.https-dev.tls=true
+            - traefik.http.services.dev.loadbalancer.server.port=80
+    pgsql:
+        image: postgres:10
+        environment:
+            POSTGRES_DB: postgres
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: password
+        labels:
+            - traefik.enable=true
+            - traefik.tcp.routers.pgsql.rule=HostSNI(`example.localhost`)
+            - traefik.tcp.routers.pgsql.tls=true
+            - traefik.tcp.routers.pgsql.service=pgsql
+            - traefik.tcp.routers.pgsql.entrypoints=postgres
+            - traefik.tcp.services.pgsql.loadbalancer.server.port=5432
+    mongo:
+        image: mongo:3
+        labels:
+            - traefik.enable=true
+            - traefik.tcp.routers.mongo.rule=HostSNI(`example.localhost`)
+            - traefik.tcp.routers.mongo.tls=true
+            - traefik.tcp.routers.mongo.service=mongo
+            - traefik.tcp.routers.mongo.entrypoints=mongo
+            - traefik.tcp.services.mongo.loadbalancer.server.port=27017
+    redis:
+        image: redis:3
+        labels:
+            - traefik.enable=true
+            - traefik.tcp.routers.redis.rule=HostSNI(`example.localhost`)
+            - traefik.tcp.routers.redis.tls=true
+            - traefik.tcp.routers.redis.service=redis
+            - traefik.tcp.routers.redis.entrypoints=redis
+            - traefik.tcp.services.redis.loadbalancer.server.port=6379
